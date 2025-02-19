@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GOTTCHA2 db stats</title>
+  <!-- AG Grid Styles -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/ag-grid-community/dist/styles/ag-theme-alpine.css"
+  />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;  /* Stack children vertically */
+      width: 100%;
+      height: calc(100vh - 120px); /* Account for header */
+      padding: 1rem;
+      box-sizing: border-box;
+    }
+    .grid-container {
+      width: 100%;    /* Take full width */
+      height: 100%; /* Take full height by default */
+      margin: 0;      /* Remove margins */
+      transition: height 0.2s ease;
+    }
+    .grid-container.with-tree {
+      height: 62vh; /* Reduce height when tree is visible */
+    }
+    .tree-container {
+      width: 100%;    /* Take full width */
+      height: 25vh;   /* 30% viewport height */
+      margin: 0 0 1rem 0;  /* Add bottom margin */
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      overflow: auto;
+      display: none;
+      order: -1;  /* This moves the tree container to the top */
+    }
+    .node circle {
+      fill: #fff;
+      stroke: steelblue;
+      stroke-width: 2px;
+      cursor: pointer;
+    }
+    .node--has-children circle {
+      fill: #f8f8f8;
+    }
+    .node--collapsed circle {
+      fill: #ff5555 !important;  /* Red color for collapsed nodes */
+    }
+    .node text {
+      font: 0.7rem sans-serif;
+    }
+    .link {
+      fill: none;
+      stroke: #ccc;
+      stroke-width: 1px;
+    }
+    .tooltip {
+      position: absolute;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      border-radius: 4px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 1000;
+    }
+    .loading-overlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-radius: 50%;
+      border-top: 5px solid #3498db;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .toggle-button {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1001;
+      display: block;
+    }
+    .toggle-button:hover {
+      background-color: #2980b9;
+    }
+    .toggle-button.visible {
+      display: block;
+    }
+    .db-level-stats {
+        padding: 5px;
+        background: #f8f9fa;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .db-level-item {
+        background: white;
+        padding: 4px 10px;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .db-level-count {
+        background: #3498db;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 7px;
+        font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <h3 style="text-align:center;">GOTTCHA2 GTDB_r220_BAVFPtPnPz Stats (species-lvl)</h3>
+  <div class="db-level-stats" id="dbLevelStats"></div>
+  <button id="toggleTree" class="toggle-button">Toggle Lineage</button>
+  <div class="container">
+    <div class="tree-container" id="treeView"></div>
+    <div class="grid-container ag-theme-alpine" id="myGrid"></div>
+  </div>
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+  </div>
+  <div id="tooltip" class="tooltip"></div>
+
+  <!-- AG Grid Script -->
+  <script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.js"></script>
+  <script>
+    // Helper function to parse TSV data into an array of objects
+    function parseTSV(tsv) {
+      const lines = tsv.trim().split('\n');
+      const headers = lines[0].split('\t');
+      return lines.slice(1).map(line => {
+        const values = line.split('\t');
+        const rowObject = {};
+        headers.forEach((header, index) => {
+          rowObject[header] = values[index];
+        });
+        return rowObject;
+      });
+    }
+
+    // Fetch the TSV file and initialize the grid
+    fetch('GTDB_r220_BAVFPtPnPz_mainTax_repHQ_addG.agg_stats.tsv')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok: ' + response.statusText);
+        }
+        return response.text();
+      })
+      .then(tsvData => {
+        const rowData = parseTSV(tsvData);
+
+        // Create column definitions based on the TSV header row
+        const headers = rowData.length ? Object.keys(rowData[0]) : [];
+        const columnDefs = headers.map(header => ({ field: header }));
+
+        // Grid options
+        let gridOptions = { // Changed const to let
+          columnDefs: columnDefs,
+          rowData: rowData,
+          pagination: true,
+          paginationPageSize: 50,
+          paginationPageSizeSelector: [50, 100, 200, 500],
+          suppressRowDeselection: true,
+          onGridReady: function(params) {
+            // Add filter changed handler after grid is ready
+            params.api.addEventListener('filterChanged', function() {
+                const filteredNodes = [];
+                params.api.forEachNodeAfterFilter(node => filteredNodes.push(node.data));
+                updateDBLevelStats(filteredNodes);
+            });
+
+            // Initial stats update
+            updateDBLevelStats(rowData);
+          },
+          onCellClicked: function(params) {
+            // Select the row when any cell is clicked
+            params.node.setSelected(true);
+          },
+          // Add row selection options
+          rowSelection: {
+            mode: 'multiRow',
+},
+          suppressRowDeselection: false,
+          autoSizeStrategy: {
+            type: "fitGridWidth",
+            defaultMinWidth: 10,
+            columnLimits: [
+              {
+                colId: "Name",
+                minWidth: 120,
+              },
+            ],
+          },
+          defaultColDef: {
+            sortable: true,
+            resizable: true,
+            filter: "agTextColumnFilter",
+          },
+          onRowClicked: async function(event) {
+            const treeContainer = document.getElementById('treeView');
+            const gridContainer = document.getElementById('myGrid');
+            const toggleButton = document.getElementById('toggleTree');
+            
+            // Toggle Lineage, loading, and toggle button
+            treeContainer.style.display = 'block';
+            gridContainer.classList.add('with-tree');
+            toggleButton.classList.add('visible');
+            toggleButton.textContent = 'Toggle Lineage';
+            showLoading();
+            
+            // Use setTimeout to allow UI to update before heavy computation
+            setTimeout(() => {
+                try {
+                    updateTree(event.data, rowData);
+                    gridOptions.api.sizeColumnsToFit();
+                } finally {
+                    hideLoading();
+                }
+            }, 100);
+          },
+          onFilterChanged: function() {
+            // Get filtered rows and update stats
+            const filteredNodes = [];
+            gridOptions.api.forEachNodeAfterFilter(node => filteredNodes.push(node.data));
+            updateDBLevelStats(filteredNodes);
+          },
+          onSelectionChanged: function(event) {
+            const selectedNodes = event.api.getSelectedNodes();
+            
+            // Check selection limit
+            if (selectedNodes.length > 50) {
+                alert('Please select 50 or fewer rows to view the tree visualization');
+                return;
+            }
+            
+            if (selectedNodes.length === 0) return;
+
+            const treeContainer = document.getElementById('treeView');
+            const gridContainer = document.getElementById('myGrid');
+            const toggleButton = document.getElementById('toggleTree');
+            
+            treeContainer.style.display = 'block';
+            gridContainer.classList.add('with-tree');
+            toggleButton.classList.add('visible');
+            showLoading();
+            
+            setTimeout(() => {
+                try {
+                    updateTreeWithNodes(selectedNodes.map(node => node.data), rowData);
+                    event.api.sizeColumnsToFit();
+                } finally {
+                    hideLoading();
+                }
+            }, 100);
+          }
+        };
+
+        // Initialize AG Grid
+        const gridDiv = document.getElementById('myGrid');
+        new agGrid.createGrid(gridDiv, gridOptions);
+
+        // Make the grid globally accessible
+        window.grid = gridOptions.api;
+
+        // Update DB level stats
+        updateDBLevelStats(rowData);
+      })
+      .catch(error => {
+        console.error('Error fetching or parsing TSV data:', error);
+      });
+
+      // Function to trigger the filter
+      function onQuickFilterChanged() {
+        window.grid.api.onFilterChanged();
+      }
+
+      function buildHierarchy(node, allData) {
+        let tree = {
+          name: node.Name,
+          taxid: node.Taxid,
+          children: []
+        };
+        
+        // Find all immediate children
+        const children = allData.filter(row => row.Parent_taxid === node.Taxid);
+        if (children.length > 0) {
+          tree.children = children.map(child => buildHierarchy(child, allData));
+        }
+        return tree;
+      }
+
+      function findAncestors(node, allData) {
+        let ancestors = [];
+        let current = node;
+        
+        while (current) {
+            let parent = allData.find(row => row.Taxid === current.Parent_taxid);
+            if (parent) {
+                ancestors.unshift(parent);
+                current = parent;
+            } else {
+                break;
+            }
+        }
+        return ancestors;
+    }
+
+    function buildCompleteTree(selectedNode, allData) {
+        // Get ancestors
+        const ancestors = findAncestors(selectedNode, allData);
+        
+        // Build tree starting from the topmost ancestor
+        let rootNode = ancestors[0] || selectedNode;
+        let treeData = {
+            name: rootNode.Name,
+            taxid: rootNode.Taxid,
+            children: []
+        };
+        
+        // Function to find and add node to correct position in tree
+        function addNodeToTree(tree, node) {
+            if (tree.taxid === node.Parent_taxid) {
+                tree.children.push({
+                    name: node.Name,
+                    taxid: node.Taxid,
+                    children: []
+                });
+                return true;
+            }
+            for (let child of tree.children) {
+                if (addNodeToTree(child, node)) return true;
+            }
+            return false;
+        }
+        
+        // Add ancestors and selected node to tree
+        for (let i = 1; i < ancestors.length; i++) {
+            addNodeToTree(treeData, ancestors[i]);
+        }
+        addNodeToTree(treeData, selectedNode);
+        
+        // Add all children of selected node
+        function addChildrenRecursively(parentTaxId) {
+            const children = allData.filter(row => row.Parent_taxid === parentTaxId);
+            return children.map(child => ({
+                name: child.Name,
+                taxid: child.Taxid,
+                children: addChildrenRecursively(child.Taxid)
+            }));
+        }
+        
+        // Find selected node in tree and add its children
+        function addSelectedNodeChildren(tree) {
+            if (tree.taxid === selectedNode.Taxid) {
+                tree.children = addChildrenRecursively(tree.taxid);
+                return true;
+            }
+            for (let child of tree.children) {
+                if (addSelectedNodeChildren(child)) return true;
+            }
+            return false;
+        }
+        
+        addSelectedNodeChildren(treeData);
+        return treeData;
+    }
+
+    function updateTree(selectedNode, allData) {
+        const treeData = buildCompleteTree(selectedNode, allData);
+        d3.select("#treeView").html("");
+
+        const width = document.getElementById('treeView').offsetWidth;
+        const height = document.getElementById('treeView').offsetHeight;
+
+        const tree = d3.tree()
+            .size([height - 40, width - 160]);
+
+        const svg = d3.select("#treeView")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(80,20)");
+
+        // Create hierarchy and store initial positions
+        const root = d3.hierarchy(treeData);
+        root.x0 = height / 2;
+        root.y0 = 0;
+
+        // Toggle children function
+        function toggleChildren(d) {
+            if (d.children) {
+                d._children = d.children;
+                d.children = null;
+            } else {
+                d.children = d._children;
+                d._children = null;
+            }
+        }
+
+        // Update tree function
+        function update(source) {
+            const duration = 750;
+
+            // Compute the new tree layout
+            const nodes = tree(root);
+            const descendants = nodes.descendants();
+            const links = nodes.links();
+
+            // Normalize for fixed-depth
+            descendants.forEach(d => {
+                d.y = d.depth * 180;
+            });
+
+            // Update the nodes
+            const node = svg.selectAll(".node")
+                .data(descendants, d => d.data.taxid);
+
+            // Add tooltip div if it doesn't exist
+            const tooltip = d3.select("#tooltip");
+
+            // Enter new nodes
+            const nodeEnter = node.enter()
+                .append("g")
+                .attr("class", d => {
+                    let classes = "node";
+                    if (d._children) classes += " node--collapsed";
+                    if (d._children || d.children) classes += " node--has-children";
+                    return classes;
+                })
+                .attr("transform", d => `translate(${source.y0},${source.x0})`)
+                .on("click", (event, d) => {
+                    toggleChildren(d);
+                    update(d);
+                })
+                .on("mouseover", (event, d) => {
+                    // Find full node data
+                    const nodeData = allData.find(item => item.Taxid === d.data.taxid);
+                    
+                    // Create tooltip content
+                    const tooltipContent = `
+                        <strong>Rank:</strong> ${nodeData.DB_level || 'N/A'}<br>
+                        <strong>Name:</strong> ${nodeData.Name}<br>
+                        <strong>Taxid:</strong> ${nodeData.Taxid}<br>
+                        <strong>Parent:</strong> ${nodeData.Parent_taxid}<br>
+                        <strong>Num Of Seq:</strong> ${nodeData.NumOfSeq || 'N/A'}<br>
+                        <strong>Max:</strong> ${nodeData.Max || 'N/A'}<br>
+                        <strong>Min:</strong> ${nodeData.Min || 'N/A'}<br>
+                        <strong>Total Length:</strong> ${nodeData.TotalLength || 'N/A'}<br>
+                        <strong>Children:</strong> ${d.children ? d.children.length : d._children ? d._children.length : 0}
+                    `;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 10) + "px")
+                        .style("opacity", 1);
+                })
+                .on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                })
+                .on("mousemove", (event) => {
+                    tooltip
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                });
+
+            // Add Circle for the nodes
+            nodeEnter.append("circle")
+                .attr("r", 6)
+                .style("fill", d => {
+                    if (d.data.taxid === selectedNode.Taxid) return "darkorange";
+                    if (findAncestors(selectedNode, allData).some(a => a.Taxid === d.data.taxid)) return "#a6cee3";
+                    if (d._children) return "#ff5555"; // Red for collapsed nodes
+                    return "#fff";
+                });
+
+            // Add labels
+            nodeEnter.append("text")
+                .attr("dy", ".35em")
+                .attr("x", d => d.children || d._children ? -13 : 13)
+                .style("text-anchor", d => d.children || d._children ? "end" : "start")
+                .text(d => d.data.name);
+
+            // UPDATE
+            const nodeUpdate = node.merge(nodeEnter)
+                .transition()
+                .duration(duration)
+                .attr("class", d => {
+                    let classes = "node";
+                    if (d._children) classes += " node--collapsed";
+                    if (d._children || d.children) classes += " node--has-children";
+                    return classes;
+                })
+                .attr("transform", d => `translate(${d.y},${d.x})`);
+
+            // Update the node attributes and style
+            nodeUpdate.select("circle")
+                .attr("r", 6)
+                .style("fill", d => {
+                    if (d.data.taxid === selectedNode.Taxid) return "darkorange";
+                    if (findAncestors(selectedNode, allData).some(a => a.Taxid === d.data.taxid)) return "#a6cee3";
+                    if (d._children) return "#ff5555"; // Red for collapsed nodes
+                    return "#fff";
+                });
+
+            // Remove any exiting nodes
+            const nodeExit = node.exit()
+                .transition()
+                .duration(duration)
+                .attr("transform", d => `translate(${source.y},${source.x})`)
+                .remove();
+
+            // Update the links
+            const link = svg.selectAll(".link")
+                .data(links, d => d.target.data.taxid);
+
+            // Enter any new links
+            const linkEnter = link.enter()
+                .insert("path", "g")
+                .attr("class", "link")
+                .attr("d", d3.linkHorizontal()
+                    .x(d => source.y0)
+                    .y(d => source.x0));
+
+            // UPDATE
+            link.merge(linkEnter)
+                .transition()
+                .duration(duration)
+                .attr("d", d3.linkHorizontal()
+                    .x(d => d.y)
+                    .y(d => d.x));
+
+            // Remove any exiting links
+            link.exit()
+                .transition()
+                .duration(duration)
+                .attr("d", d3.linkHorizontal()
+                    .x(d => source.y)
+                    .y(d => d.x))
+                .remove();
+
+            // Store the old positions for transition
+            descendants.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+
+        // Initialize display
+        update(root);
+    }
+
+    function mergeTrees(nodes, allData) {
+        // Find all unique ancestors for all selected nodes
+        const allAncestors = nodes.map(node => {
+            const ancestors = findAncestors(node, allData);
+            return [...ancestors, node];
+        });
+
+        // Find the common root
+        const commonAncestors = allAncestors.reduce((common, current) => {
+            return common.filter(node => 
+                current.some(n => n.Taxid === node.Taxid)
+            );
+        }, allAncestors[0] || []);
+
+        // Create artificial root node if no common ancestors
+        const rootNode = commonAncestors[0] || {
+            Name: "Root",
+            Taxid: "root",
+            children: []
+        };
+
+        // Initialize tree with root node
+        let treeData = {
+            name: rootNode.Name,
+            taxid: rootNode.Taxid,
+            children: []
+        };
+
+        // Modified addPathToTree to handle paths without common ancestors
+        function addPathToTree(path) {
+            let current = treeData;
+            // Skip common ancestor if it exists
+            const startIndex = rootNode.Taxid === "root" ? 0 : 
+                             path.findIndex(node => node.Taxid === rootNode.Taxid) + 1;
+            
+            for (let i = startIndex; i < path.length; i++) {
+                const node = path[i];
+                let child = current.children.find(c => c.taxid === node.Taxid);
+                
+                if (!child) {
+                    child = {
+                        name: node.Name,
+                        taxid: node.Taxid,
+                        children: []
+                    };
+                    current.children.push(child);
+                }
+                current = child;
+            }
+        }
+
+        // Add all paths to the tree
+        allAncestors.forEach(path => addPathToTree(path));
+
+        // Rest of existing mergeTrees code...
+        function addSelectedNodeChildren(tree, selectedNodes) {
+            if (selectedNodes.some(node => node.Taxid === tree.taxid)) {
+                const children = allData.filter(row => row.Parent_taxid === tree.taxid);
+                tree.children.push(...children.map(child => ({
+                    name: child.Name,
+                    taxid: child.Taxid,
+                    children: []
+                })));
+            }
+            tree.children.forEach(child => addSelectedNodeChildren(child, selectedNodes));
+        }
+
+        addSelectedNodeChildren(treeData, nodes);
+        return treeData;
+    }
+
+    function updateTreeWithNodes(selectedNodes, allData) {
+        if (!selectedNodes || selectedNodes.length === 0) return;
+
+        // Use merged tree structure instead of separate trees
+        const treeData = mergeTrees(selectedNodes, allData);
+
+        d3.select("#treeView").html("");
+        const width = document.getElementById('treeView').offsetWidth;
+        const height = document.getElementById('treeView').offsetHeight;
+
+        const tree = d3.tree().size([height - 40, width - 160]);
+        const svg = d3.select("#treeView")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(80,20)");
+
+        const root = d3.hierarchy(treeData);
+        root.x0 = height / 2;
+        root.y0 = 0;
+
+        // Update node colors in the existing update function
+        function update(source) {
+            const duration = 750;
+
+            // Compute the new tree layout
+            const nodes = tree(root);
+            const descendants = nodes.descendants();
+            const links = nodes.links();
+
+            // Normalize for fixed-depth
+            descendants.forEach(d => {
+                d.y = d.depth * 180;
+            });
+
+            // Update the nodes
+            const node = svg.selectAll(".node")
+                .data(descendants, d => d.data.taxid);
+
+            // Add tooltip div if it doesn't exist
+            const tooltip = d3.select("#tooltip");
+
+            // Enter new nodes
+            const nodeEnter = node.enter()
+                .append("g")
+                .attr("class", d => {
+                    let classes = "node";
+                    if (d._children) classes += " node--collapsed";
+                    if (d._children || d.children) classes += " node--has-children";
+                    return classes;
+                })
+                .attr("transform", d => `translate(${source.y0},${source.x0})`)
+                .on("click", (event, d) => {
+                    toggleChildren(d);
+                    update(d);
+                })
+                .on("mouseover", (event, d) => {
+                    // Find full node data
+                    const nodeData = allData.find(item => item.Taxid === d.data.taxid);
+                    
+                    // Create tooltip content
+                    const tooltipContent = `
+                        <strong>Rank:</strong> ${nodeData.DB_level || 'N/A'}<br>
+                        <strong>Name:</strong> ${nodeData.Name}<br>
+                        <strong>Taxid:</strong> ${nodeData.Taxid}<br>
+                        <strong>Parent:</strong> ${nodeData.Parent_taxid}<br>
+                        <strong>Num Of Seq:</strong> ${nodeData.NumOfSeq || 'N/A'}<br>
+                        <strong>Max:</strong> ${nodeData.Max || 'N/A'}<br>
+                        <strong>Min:</strong> ${nodeData.Min || 'N/A'}<br>
+                        <strong>Total Length:</strong> ${nodeData.TotalLength || 'N/A'}<br>
+                        <strong>Children:</strong> ${d.children ? d.children.length : d._children ? d._children.length : 0}
+                    `;
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 10) + "px")
+                        .style("opacity", 1);
+                })
+                .on("mouseout", () => {
+                    tooltip.style("opacity", 0);
+                })
+                .on("mousemove", (event) => {
+                    tooltip
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                });
+
+            // Add Circle for the nodes
+            nodeEnter.append("circle")
+                .attr("r", 6)
+                .style("fill", d => {
+                    if (selectedNodes.some(node => node.Taxid === d.data.taxid)) return "darkorange";
+                    if (d._children) return "#ff5555"; // Red for collapsed nodes
+                    return "#fff";
+                });
+
+            // Add labels
+            nodeEnter.append("text")
+                .attr("dy", ".35em")
+                .attr("x", d => d.children || d._children ? -13 : 13)
+                .style("text-anchor", d => d.children || d._children ? "end" : "start")
+                .text(d => d.data.name);
+
+            // UPDATE
+            const nodeUpdate = node.merge(nodeEnter)
+                .transition()
+                .duration(duration)
+                .attr("class", d => {
+                    let classes = "node";
+                    if (d._children) classes += " node--collapsed";
+                    if (d._children || d.children) classes += " node--has-children";
+                    return classes;
+                })
+                .attr("transform", d => `translate(${d.y},${d.x})`);
+
+            // Update the node attributes and style
+            nodeUpdate.select("circle")
+                .attr("r", 6)
+                .style("fill", d => {
+                    if (selectedNodes.some(node => node.Taxid === d.data.taxid)) return "darkorange";
+                    if (d._children) return "#ff5555"; // Red for collapsed nodes
+                    return "#fff";
+                });
+
+            // Remove any exiting nodes
+            const nodeExit = node.exit()
+                .transition()
+                .duration(duration)
+                .attr("transform", d => `translate(${source.y},${source.x})`)
+                .remove();
+
+            // Update the links
+            const link = svg.selectAll(".link")
+                .data(links, d => d.target.data.taxid);
+
+            // Enter any new links
+            const linkEnter = link.enter()
+                .insert("path", "g")
+                .attr("class", "link")
+                .attr("d", d3.linkHorizontal()
+                    .x(d => source.y0)
+                    .y(d => source.x0));
+
+            // UPDATE
+            link.merge(linkEnter)
+                .transition()
+                .duration(duration)
+                .attr("d", d3.linkHorizontal()
+                    .x(d => d.y)
+                    .y(d => d.x));
+
+            // Remove any exiting links
+            link.exit()
+                .transition()
+                .duration(duration)
+                .attr("d", d3.linkHorizontal()
+                    .x(d => source.y)
+                    .y(d => d.x))
+                .remove();
+
+            // Store the old positions for transition
+            descendants.forEach(d => {
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+        }
+
+        update(root);
+    }
+
+    function showLoading() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    function toggleTreeView() {
+      const treeContainer = document.getElementById('treeView');
+      const gridContainer = document.getElementById('myGrid');
+      const toggleButton = document.getElementById('toggleTree');
+      
+      if (treeContainer.style.display === 'none') {
+          treeContainer.style.display = 'block';
+          gridContainer.classList.add('with-tree');
+          toggleButton.textContent = 'Toggle Lineage';
+      } else {
+          treeContainer.style.display = 'none';
+          gridContainer.classList.remove('with-tree');
+          toggleButton.textContent = 'Toggle Lineage';
+      }
+      
+      setTimeout(() => {
+          gridOptions.api.sizeColumnsToFit();
+      }, 300);
+    }
+
+    // Add event listener for toggle button
+    document.getElementById('toggleTree').addEventListener('click', toggleTreeView);
+
+    function updateDBLevelStats(data) {
+        const counts = {};
+        let total = 0;
+        
+        // Clear previous stats first
+        const container = document.getElementById('dbLevelStats');
+        container.innerHTML = '';
+        
+        // Count occurrences of each DB_level
+        data.forEach(item => {
+            if (!item) return; // Skip null/undefined items
+            const level = item.DB_level || 'Unknown';
+            counts[level] = (counts[level] || 0) + 1;
+            total++;
+        });
+
+        // Add total count first
+        const totalDiv = document.createElement('div');
+        totalDiv.className = 'db-level-item';
+        totalDiv.innerHTML = `Showing <span class="db-level-count">${total}</span>`;
+        container.appendChild(totalDiv);
+
+        // Add individual level counts sorted by count
+        Object.entries(counts)
+            .sort(([, a], [b]) => b - a)
+            .forEach(([level, count]) => {
+                const div = document.createElement('div');
+                div.className = 'db-level-item';
+                div.innerHTML = `${level} <span class="db-level-count">${count}</span>`;
+                container.appendChild(div);
+            });
+    }
+  </script>
+</body>
+</html>
