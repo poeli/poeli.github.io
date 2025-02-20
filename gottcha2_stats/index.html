@@ -37,7 +37,7 @@
     }
     .tree-container {
       width: 100%;    /* Take full width */
-      height: 25vh;   /* 30% viewport height */
+      height: 25vh;   /* 25% viewport height */
       margin: 0 0 1rem 0;  /* Add bottom margin */
       border: 1px solid #ddd;
       border-radius: 10px;
@@ -208,7 +208,6 @@
           pagination: true,
           paginationPageSize: 100,
           paginationPageSizeSelector: [50, 100, 200, 500],
-          suppressRowDeselection: true,
           onGridReady: function(params) {
             // Add filter changed handler after grid is ready
             params.api.addEventListener('filterChanged', function() {
@@ -227,8 +226,7 @@
           // Add row selection options
           rowSelection: {
             mode: 'multiRow',
-},
-          suppressRowDeselection: false,
+          },
           autoSizeStrategy: {
             type: "fitGridWidth",
             defaultMinWidth: 10,
@@ -428,6 +426,16 @@
             .attr("height", height)
             .append("g")
             .attr("transform", "translate(80,20)");
+
+        // Add drag behavior to SVG
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 2])
+            .on("zoom", (event) => {
+                svg.attr("transform", event.transform);
+            });
+
+        // Apply zoom behavior to the SVG container, not the group
+        d3.select("#treeView svg").call(zoom);
 
         // Create hierarchy and store initial positions
         const root = d3.hierarchy(treeData);
@@ -674,6 +682,16 @@
             .attr("height", height)
             .append("g")
             .attr("transform", "translate(80,20)");
+
+        // Add drag behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 2])
+            .on("zoom", (event) => {
+                svg.attr("transform", event.transform);
+            });
+
+        // Apply zoom behavior to the SVG container
+        d3.select("#treeView svg").call(zoom);
 
         const root = d3.hierarchy(treeData);
         root.x0 = height / 2;
