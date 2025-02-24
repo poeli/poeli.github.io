@@ -518,13 +518,6 @@
                     return "#fff";
                 });
 
-            // Add labels
-            nodeEnter.append("text")
-                .attr("dy", ".35em")
-                .attr("x", d => d.children || d._children ? -13 : 13)
-                .style("text-anchor", d => d.children || d._children ? "end" : "start")
-                .text(d => d.data.name);
-
             // UPDATE
             const nodeUpdate = node.merge(nodeEnter)
                 .transition()
@@ -536,6 +529,15 @@
                     return classes;
                 })
                 .attr("transform", d => `translate(${d.y},${d.x})`);
+
+            // Add labels
+            nodeEnter.append("text")
+                .attr("dy", ".35em")
+                .attr("x", d => d.children || d._children ? -13 : 13)
+                .style("text-anchor", d => d.children || d._children ? "end" : "start")
+                .style("alignment-baseline", d => (d.depth > 0 && (d._children || d.children)) ? "hanging" : "baseline")
+                .text(d => d.data.name);
+
 
             // Update the node attributes and style
             nodeUpdate.select("circle")
@@ -699,7 +701,7 @@
 
         // Update node colors in the existing update function
         function update(source) {
-            const duration = 750;
+            const duration = 400;
 
             // Compute the new tree layout
             const nodes = tree(root);
@@ -725,6 +727,7 @@
                     let classes = "node";
                     if (d._children) classes += " node--collapsed";
                     if (d._children || d.children) classes += " node--has-children";
+                    if (d.depth > 0 && (d._children || d.children)) classes += " node--internal";
                     return classes;
                 })
                 .attr("transform", d => `translate(${source.y0},${source.x0})`)
@@ -772,13 +775,6 @@
                     return "#fff";
                 });
 
-            // Add labels
-            nodeEnter.append("text")
-                .attr("dy", ".35em")
-                .attr("x", d => d.children || d._children ? -13 : 13)
-                .style("text-anchor", d => d.children || d._children ? "end" : "start")
-                .text(d => d.data.name);
-
             // UPDATE
             const nodeUpdate = node.merge(nodeEnter)
                 .transition()
@@ -790,6 +786,14 @@
                     return classes;
                 })
                 .attr("transform", d => `translate(${d.y},${d.x})`);
+
+            // Add labels
+            nodeEnter.append("text")
+                .attr("dy", ".35em")
+                .attr("x", d => d.children || d._children ? -13 : 13)
+                .style("text-anchor", d => d.children || d._children ? "end" : "start")
+                .style("alignment-baseline", d => (d.depth > 0 && (d._children || d.children)) ? "hanging" : "baseline")
+                .text(d => d.data.name);
 
             // Update the node attributes and style
             nodeUpdate.select("circle")
