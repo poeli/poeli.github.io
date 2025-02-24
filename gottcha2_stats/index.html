@@ -533,11 +533,13 @@
             // Add labels
             nodeEnter.append("text")
                 .attr("dy", ".35em")
-                .attr("x", d => d.children || d._children ? -13 : 13)
+                .attr("x", d => d.children || d._children ? -10 : 10)
                 .style("text-anchor", d => d.children || d._children ? "end" : "start")
                 .style("alignment-baseline", d => (d.depth > 0 && (d._children || d.children)) ? "hanging" : "baseline")
-                .text(d => d.data.name);
-
+                .text(d => {
+                    const nameParts = d.data.name.split(" - ");
+                    return nameParts[nameParts.length - 1];
+                });
 
             // Update the node attributes and style
             nodeUpdate.select("circle")
@@ -701,7 +703,7 @@
 
         // Update node colors in the existing update function
         function update(source) {
-            const duration = 400;
+            const duration = 300;
 
             // Compute the new tree layout
             const nodes = tree(root);
@@ -790,10 +792,13 @@
             // Add labels
             nodeEnter.append("text")
                 .attr("dy", ".35em")
-                .attr("x", d => d.children || d._children ? -13 : 13)
+                .attr("x", d => d.children || d._children ? -10 : 10)
                 .style("text-anchor", d => d.children || d._children ? "end" : "start")
                 .style("alignment-baseline", d => (d.depth > 0 && (d._children || d.children)) ? "hanging" : "baseline")
-                .text(d => d.data.name);
+                .text(d => {
+                    const nameParts = d.data.name.split(" - ");
+                    return nameParts[nameParts.length - 1];
+                });
 
             // Update the node attributes and style
             nodeUpdate.select("circle")
