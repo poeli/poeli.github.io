@@ -180,7 +180,8 @@
         const values = line.split('\t');
         const rowObject = {};
         headers.forEach((header, index) => {
-          rowObject[header] = values[index];
+          const isNumber = !isNaN(values[index]) && values[index] !== '';
+          rowObject[header] = isNumber? Number(values[index]) : values[index];
         });
         return rowObject;
       });
@@ -197,9 +198,18 @@
       .then(tsvData => {
         const rowData = parseTSV(tsvData);
 
-        // Create column definitions based on the TSV header row
+        // Create column definitions based on the TSV header row and first row data
         const headers = rowData.length ? Object.keys(rowData[0]) : [];
-        const columnDefs = headers.map(header => ({ field: header }));
+        const columnDefs = headers.map(header => {
+            const firstValue = rowData[0][header];
+            const isNumber = !isNaN(firstValue) && firstValue !== '';
+            
+            return {
+                field: header,
+                cellDataType: isNumber ? 'number' : 'string',
+                filter: isNumber ? 'agNumberColumnFilter' : 'agTextColumnFilter'
+            };
+        });
 
         // Grid options
         let gridOptions = { // Changed const to let
@@ -240,7 +250,6 @@
           defaultColDef: {
             sortable: true,
             resizable: true,
-            filter: "agTextColumnFilter",
           },
           onRowClicked: async function(event) {
             const treeContainer = document.getElementById('treeView');
