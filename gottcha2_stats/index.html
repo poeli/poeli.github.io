@@ -492,7 +492,7 @@
                     
                     // Create tooltip content
                     const tooltipContent = `
-                        <strong>Rank:</strong> ${nodeData.DB_level || 'N/A'}<br>
+                        <strong>Rank:</strong> ${nodeData.Level || 'N/A'}<br>
                         <strong>Name:</strong> ${nodeData.Name}<br>
                         <strong>Taxid:</strong> ${nodeData.Taxid}<br>
                         <strong>Parent:</strong> ${nodeData.Parent_taxid}<br>
@@ -752,7 +752,7 @@
                     
                     // Create tooltip content
                     const tooltipContent = `
-                        <strong>Rank:</strong> ${nodeData.DB_level || 'N/A'}<br>
+                        <strong>Rank:</strong> ${nodeData.Level || 'N/A'}<br>
                         <strong>Name:</strong> ${nodeData.Name}<br>
                         <strong>Taxid:</strong> ${nodeData.Taxid}<br>
                         <strong>Parent:</strong> ${nodeData.Parent_taxid}<br>
@@ -903,10 +903,10 @@
         const container = document.getElementById('dbLevelStats');
         container.innerHTML = '';
         
-        // Count occurrences of each DB_level
+        // Count occurrences of each Level
         data.forEach(item => {
             if (!item) return; // Skip null/undefined items
-            const level = item.DB_level || 'Unknown';
+            const level = item.Level || 'Unknown';
             counts[level] = (counts[level] || 0) + 1;
             total++;
         });
