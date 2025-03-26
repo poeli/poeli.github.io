@@ -113,8 +113,15 @@
       z-index: 1001;
       display: block;
     }
+    #resetButton {
+      right: 100px; /* Position the reset button to the left of the toggle button */
+      background-color: #e7753c; /* Red color to distinguish it */
+    }
+    #resetButton:hover {
+      background-color: #c0392b;
+    }
     .toggle-button:hover {
-      background-color: #2980b9;
+      background-color: #125481;
     }
     .toggle-button.visible {
       display: block;
@@ -148,7 +155,8 @@
 <body>
   <h3 style="text-align:center;">GOTTCHA2 GTDB_r220_BAVFPtPnPz Stats (species-lvl)</h3>
   <div class="db-level-stats" id="dbLevelStats"></div>
-  <button id="toggleTree" class="toggle-button">Toggle Lineage</button>
+  <button id="toggleTree" class="toggle-button">Toggle</button>
+  <button id="resetButton" class="toggle-button">Reset</button>
   <div class="container">
     <div class="tree-container" id="treeView"></div>
     <div class="grid-container ag-theme-alpine" id="myGrid"></div>
@@ -256,11 +264,11 @@
             const gridContainer = document.getElementById('myGrid');
             const toggleButton = document.getElementById('toggleTree');
             
-            // Toggle Lineage, loading, and toggle button
+            // Toggle, loading, and toggle button
             treeContainer.style.display = 'block';
             gridContainer.classList.add('with-tree');
             toggleButton.classList.add('visible');
-            toggleButton.textContent = 'Toggle Lineage';
+            toggleButton.textContent = 'Toggle';
             showLoading();
             
             // Use setTimeout to allow UI to update before heavy computation
@@ -311,10 +319,10 @@
 
         // Initialize AG Grid
         const gridDiv = document.getElementById('myGrid');
-        new agGrid.createGrid(gridDiv, gridOptions);
+        window.grid = new agGrid.createGrid(gridDiv, gridOptions);
 
-        // Make the grid globally accessible
-        window.grid = gridOptions.api;
+        // // Make the grid globally accessible
+        // gridOptions.api;
 
         // Update DB level stats
         updateDBLevelStats(rowData);
@@ -880,11 +888,11 @@
       if (treeContainer.style.display === 'none') {
           treeContainer.style.display = 'block';
           gridContainer.classList.add('with-tree');
-          toggleButton.textContent = 'Toggle Lineage';
+          toggleButton.textContent = 'Toggle';
       } else {
           treeContainer.style.display = 'none';
           gridContainer.classList.remove('with-tree');
-          toggleButton.textContent = 'Toggle Lineage';
+          toggleButton.textContent = 'Toggle';
       }
       
       setTimeout(() => {
@@ -894,6 +902,20 @@
 
     // Add event listener for toggle button
     document.getElementById('toggleTree').addEventListener('click', toggleTreeView);
+
+    // Reset function to clear tree and deselect all rows
+    function resetTreeAndSelections() {
+      // Clear the tree view but keep the container
+      d3.select("#treeView").html("");
+      
+      // Deselect all rows in the grid
+      if (window.grid) {
+        window.grid.deselectAll();
+      }
+    }
+
+    // Add event listener for the reset button
+    document.getElementById('resetButton').addEventListener('click', resetTreeAndSelections);
 
     function updateDBLevelStats(data) {
         const counts = {};
