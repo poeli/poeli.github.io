@@ -215,7 +215,12 @@
             return {
                 field: header,
                 cellDataType: isNumber ? 'number' : 'string',
-                filter: isNumber ? 'agNumberColumnFilter' : 'agTextColumnFilter'
+                filter: isNumber ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+                valueFormatter: isNumber ? (params) => {
+                    // Format numbers with commas as thousand separators
+                    return params.value.toLocaleString();
+                } : undefined,
+                cellStyle: isNumber ? { textAlign: 'right' } : null
             };
         });
 
@@ -320,9 +325,6 @@
         // Initialize AG Grid
         const gridDiv = document.getElementById('myGrid');
         window.grid = new agGrid.createGrid(gridDiv, gridOptions);
-
-        // // Make the grid globally accessible
-        // gridOptions.api;
 
         // Update DB level stats
         updateDBLevelStats(rowData);
@@ -911,6 +913,12 @@
       // Deselect all rows in the grid
       if (window.grid) {
         window.grid.deselectAll();
+        
+        // Clear all filters
+        window.grid.setFilterModel(null);
+        
+        // Trigger filter changed event to update stats
+        window.grid.onFilterChanged();
       }
     }
 
@@ -936,7 +944,7 @@
         // Add total count first
         const totalDiv = document.createElement('div');
         totalDiv.className = 'db-level-item';
-        totalDiv.innerHTML = `Showing <span class="db-level-count">${total}</span>`;
+        totalDiv.innerHTML = `Showing <span class="db-level-count">${total.toLocaleString()}</span>`;
         container.appendChild(totalDiv);
 
         // Add individual level counts sorted by count
@@ -945,7 +953,7 @@
             .forEach(([level, count]) => {
                 const div = document.createElement('div');
                 div.className = 'db-level-item';
-                div.innerHTML = `${level} <span class="db-level-count">${count}</span>`;
+                div.innerHTML = `${level} <span class="db-level-count">${count.toLocaleString()}</span>`;
                 container.appendChild(div);
             });
     }
